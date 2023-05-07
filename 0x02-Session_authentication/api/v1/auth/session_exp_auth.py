@@ -1,60 +1,47 @@
 #!/usr/bin/env python3
-"""
-Session Authentication
-"""
-
-from api.v1.auth.session_auth import SessionAuth
-from os import getenv
+"""Session authentication"""
+import os
+from flask import request
 from datetime import datetime, timedelta
+
+from .session_auth import SessionAuth
 
 
 class SessionExpAuth(SessionAuth):
-    """ Session Authentication """
+    """Session authentication
+    """
 
-    def __init__(self):
-        """ Override init method """
-
+    def __init__(self) -> None:
+        """ Now initializes a new SessionExpAuth method"""
+        super().__init__()
         try:
-            self.session_duration = int(getenv('SESSION_DURATION'))
+            self.session_duration = int(os.getenv('SESSION_DURATION', '0'))
         except Exception:
             self.session_duration = 0
 
-    def create_session(self, user_id: str = None) -> str:
-        """ Creating Session ID for user_id 
+    def create_session(self, user_id=None):
+        """Creates a sessio
         """
-
-        try:
-            session_id = super().create_session(user_id)
-        except Exception:
+        session_id = super().create_session(user_id)
+        if type(session_id) != str:
             return None
-
-        session_dictionary = {
+        self.user_id_by_session_id[session_id] = {
             'user_id': user_id,
-            'created_at': datetime.now()
+            'created_at': datetime.now(),
         }
-
-        self.user_id_by_session_id[session_id] = session_dictionary
-
         return session_id
 
-    def user_id_for_session_id(self, session_id: str = None) -> str:
-        """ User id for session"""
-
-        if session_id is None or isinstance(session_id, str) is False:
-            return None
-
-        session_dict = self.user_id_by_session_id.get(session_id)
-
-        if session_dict is None or 'created_at' not in session_dict:
-            return None
-
-        if self.session_duration <= 0:
-            return session_dict.get('user_id')
-
-        created_time = session_dict.get('created_at')
-        session_elapsed = timedelta(seconds=self.session_duration)
-
-        if created_time + session_elapsed < datetime.now():
-            return None
-        else:
-            return session_dict.get('user_id')
+    def user_id_for_session_id(self, session_id=None) -> str:
+        """user id for session"""
+        if session_id in self.user_id_by_session_id:
+            session_dict = self.user_id_by_session_id[session_id]
+            if self.session_duration <= 0:
+                return session_dict['user_id']
+            if 'created_at' not in session_dict:
+                return None
+            cur_time = datetime.now()
+            time_span = timedelta(seconds=self.session_duration)
+            exp_time = session_dict['created_at'] + time_span
+            if exp_time < cur_time:
+                return None
+            return session_dict['user_id']

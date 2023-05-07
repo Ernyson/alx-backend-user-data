@@ -1,29 +1,51 @@
 #!/usr/bin/env python3
-"""
-API session db module
-"""
+"""Session authentication"""
+from flask import request
+from datetime import datetime, timedelta
 
-from api.v1.auth.session_exp_auth import SessionExpAuth
-from os import getenv
+from models.user_session import UserSession
+from .session_exp_auth import SessionExpAuth
 
 
 class SessionDBAuth(SessionExpAuth):
-    """ Session DB Authentication 
-    """
+    """Session authentication"""
 
-    def create_session(self, user_id: str = None) -> str:
-        """ Creating  Session 
+    def create_session(self, user_id=None) -> str:
+        """Creates session
         """
-        pass
+        session_id = super().create_session(user_id)
+        if type(session_id) == str:
+            kwargs = {
+                'user_id': user_id,
+                'session_id': session_id,
+            }
+            user_session = UserSession(**kwargs)
+            user_session.save()
+            return session_id
 
-    def user_id_for_session_id(self, session_id: str = None) -> str:
-        """ User id for session"""
-
-        if session_id is None or isinstance(session_id, str) is False:
+    def user_id_for_session_id(self, session_id=None):
+        """user id for session"""
+        try:
+            sessions = UserSession.search({'session_id': session_id})
+        except Exception:
             return None
-        else:
-            pass
+        if len(sessions) <= 0:
+            return None
+        cur_time = datetime.now()
+        time_span = timedelta(seconds=self.session_duration)
+        exp_time = sessions[0].created_at + time_span
+        if exp_time < cur_time:
+            return None
+        return sessions[0].user_id
 
-    def destroy_session(self, request=None):
-        """ Now deleting user session """
-        pass
+    def destroy_session(self, request=None) -> bool:
+        """Destroying auth session"""
+        session_id = self.session_cookie(request)
+        try:
+            sessions = UserSession.search({'session_id': session_id})
+        except Exception:
+            return False
+        if len(sessions) <= 0:
+            return False
+        sessions[0].remove()
+        return True
